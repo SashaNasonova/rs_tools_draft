@@ -1,0 +1,129 @@
+---
+title: "GUI for Quality Control"
+output: html_document
+date: "2023-04-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Purpose
+The goal is to build a Graphic User Interface (GUI) in R that will allow the user to visualize imagery and input values that will populate a table. 
+
+## Tools
+
+-	R and R Studio
+-	Terra package for raster and vector plotting
+-	RShiny package for the GUI (possibly?)
+
+I asked ChatGPT to provide me with a list of tools in R for GUI building. Here is what it said, not sure about the accuracy:
+
+There are several options for building Graphical User Interfaces (GUIs) in R:
+Shiny: Shiny is a web application framework for R that allows you to create interactive web applications with R. Shiny provides a range of pre-built input widgets and output widgets that can be used to build custom dashboards, data visualizations, and data analysis tools.
+
+RGtk2: RGtk2 is an R interface to the Gtk+ GUI toolkit. Gtk+ is a cross-platform GUI toolkit that provides a range of widgets for building desktop applications. RGtk2 allows you to build desktop applications with R and Gtk+.
+tcltk: tcltk is an R interface to the Tcl/Tk GUI toolkit. Tcl/Tk is a cross-platform GUI toolkit that provides a range of widgets for building desktop applications. tcltk allows you to build desktop applications with R and Tcl/Tk.
+
+gWidgets: gWidgets is a cross-platform GUI toolkit for R that provides a range of widgets for building desktop applications. gWidgets is designed to be easy to use and provides a consistent API across different platforms.
+
+RStudio: RStudio is an integrated development environment (IDE) for R that provides a range of tools for working with R, including a GUI builder. The GUI builder allows you to drag and drop widgets to build custom GUIs for your R scripts.
+Each of these options has its own strengths and weaknesses, so you should choose the one that best meets your needs based on the type of application you want to build and your own preferences and skills.
+
+#Plotting Spatial Data in R
+```{r}
+suppressWarnings({
+  library(terra)
+  library(tidyverse)})
+
+root <- 'C:/Dev/git/rs_tools_draft/GUI'
+
+#read shapefile
+s <- file.path(root,'recentlyHarvested_CBB_v5.shp')
+dfs <- vect(s)
+
+dfs #this shows metadata
+```
+
+Choose one polygon based on the Obj_ID2 column and plot it. The x and y coordinates are in BC Albers (EPSG:3005)
+I have only give you rasters for 3 polygons (A1000_1,A1470_823 and DS5021_PHI_4273)
+```{r}
+f <- 'A1000_1'
+dfs_sub <- dfs[dfs$Obj_ID2 %in% f, ]
+plot(dfs_sub,border='red',lwd=1)#add cutblock boundary
+```
+
+But what we really want to do is be able to plot the raster and vector together, with some metadata
+
+```{r}
+name <- 'rgb_2022-05-21_S2.tif'
+r <- file.path(root,'rasters',f,name)
+b <- rast(r)
+
+plot(b) #plot rgb
+plot(dfs_sub,border='red',lwd=1,add=TRUE)#add cutblock boundary
+
+```
+
+We would also like to do add some metadata to the image which is a little painful. If you find a better way please let me know!
+
+```{r}
+
+plot(b) #plot rgb
+plot(dfs_sub,border='red',lwd=1,add=TRUE)#add cutblock boundary
+
+cc <- par('usr') #get extent of the plot
+x_dist <- (cc[[2]] - cc[[1]]) * 0.07
+y_dist <- (cc[[4]] - cc[[3]]) * 0.05
+
+area_ha <- round(expanse(dfs_sub,unit="ha"),digits=1) #not sure why this outputs a warning. 
+img_date <- strsplit(name,split="_",fixed=T)[[1]][[2]]
+sensor <- strsplit(strsplit(name,'_')[[1]][[3]],'.',fixed=T)[[1]][[1]]
+projection <- paste0(crs(b,describe=TRUE)$authority,':',crs(b,describe=TRUE)$code)
+
+str <- paste0('Area (ha): ', area_ha, '\n',
+              'Image Acquisition Date: ', img_date, '\n',
+              'Sensor: ', sensor, '\n',
+              'Projection: ', projection)
+
+#add grey box
+textWidth <- strwidth(str, cex = 3/4)
+textHeight <- strheight(str, cex = 3/4)
+
+buffer <- min(x_dist,y_dist)/2
+boxX1 <- cc[[1]] + x_dist - buffer
+boxX2 <- cc[[1]] + x_dist + textWidth + buffer
+boxY1 <- cc[[4]] - y_dist + buffer
+boxY2 <- cc[[4]] - y_dist - textHeight - buffer
+
+rect(xleft = boxX1, ybottom = boxY1, xright = boxX2, ytop = boxY2, col = "white", border = "black", lwd = 1)
+text(str, x = cc[[1]] + x_dist, y = cc[[4]] - y_dist,adj=c(0,1),cex=3/4)
+
+```
+
+
+## Steps
+Here is a rough outline of what I am imagining but please feel free to change it as you see fit.
+
+- Read in shapefile 
+- Read in raster file (satellite image)
+- Plot raster and vector, with the vector on top of the raster, add some metadata to the plot
+- Display the image from Step 3
+- Display a window that asks a user for input 
+    - Q1: Logged? Y/N 
+    - Q2: Percent?
+- Log the input and save as csv table
+
+## Sample Data
+The sample data is located here: https://github.com/SashaNasonova/rs_tools_draft/tree/main/GUI
+
+The folder contains a polygon shapefile and a folder with some rasters. 
+
+```
+recentlyHarvested_CBB_v5.shp (and associated files)
+
+|__rasters
+   |__A1000_1
+   |__A1470_823
+   |__DS5021_PHI_4273
+```
